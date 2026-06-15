@@ -6,10 +6,45 @@ import torch
 import torch.nn as nn
 
 
+class MallornData:
+    def __init__(self, data_path, log_path):
+        self.data = pd.read_csv(data_path)
 
-def get_mallorn_data(data_path):
-    data = pd.read_csv(data_path)
-    return data
+    def get_data(self):
+        return self.data
+
+    def get_log(self):
+        return self.log
+    
+    def get_discovery(self, sigma_limit = 5):
+        # return self.data[self.data['Z'] > sigma_limit]
+        '''
+        this function will return the data that is within the sigma limit of the discovery.
+        return: [discovery_time, discovery_flux, discovery_flux_error, discovery_filter]
+        '''
+        return pass 
+        
+    def remove_outliers(self, sigma_limit = 5):
+        '''
+        this function will remove the outliers from the data.
+        return: [time, flux, flux_error, filter]
+        '''
+        return pass 
+
+    @property
+    def data(self):
+        return self.get_data()
+    
+    @property
+    def log(self):
+        return self.get_log()
+
+    @property
+    def discovery(self):
+        return self.get_discovery()
+
+
+
 
 
 

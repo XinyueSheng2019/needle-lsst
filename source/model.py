@@ -2,18 +2,26 @@ import torch
 import torch.nn as nn
 import torch.nn.Transformer as Transformer
 import torch.optim as optim
+from source.data_augment import DataAugmentation
+
 
 class NeedleModel(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
+
+    def __init__(self, input_size, hidden_size, output_size, version = 'raw' | 'benchmark' | 'advanced'):
         super(NeedleModel, self).__init__()
         self.fc1 = Transformer.Linear(input_size, hidden_size)
         self.fc2 = Transformer.Linear(hidden_size, output_size)
+        self.version = version
+        self.augmentor = DataAugmentation(self.version)
 
     def forward(self, x):
         x = Transformer.relu(self.fc1(x))
         x = self.fc2(x)
         return x
     
+    def get_inputs(self, x):
+        return self.augmentor.get_augmented_data(x)
+
     def train(self, train_data, train_labels, epochs=100, learning_rate=0.001):
         optimizer = optim.Adam(self.parameters(), lr=learning_rate)
         criterion = nn.MSELoss()
