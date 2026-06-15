@@ -7,8 +7,13 @@ from source.data_augment import DataAugmentation
 
 class NeedleModel(nn.Module):
 
-    def __init__(self, input_size, hidden_size, output_size, version = 'raw' | 'benchmark' | 'advanced'):
+    def __init__(self, input_size, hidden_size, output_size, version = 'raw' | 'benchmark' | 'advanced' | 'extracted'):
+        '''
+        initialize the model.
+        '''
         super(NeedleModel, self).__init__()
+        if version not in ['raw', 'benchmark', 'advanced', 'extracted']:
+            raise ValueError(f"Invalid version: {version}, please choose from 'raw', 'benchmark', 'advanced', or 'extracted'")
         self.fc1 = Transformer.Linear(input_size, hidden_size)
         self.fc2 = Transformer.Linear(hidden_size, output_size)
         self.version = version

@@ -1,3 +1,10 @@
+'''
+==============================================
+data_augment.py
+==============================================
+
+This file contains the functions to augment the data for the model.
+'''
 import random 
 import os
 import numpy as np

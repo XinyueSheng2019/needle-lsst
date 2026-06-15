@@ -1,3 +1,10 @@
+'''
+==============================================
+inputs.py
+==============================================
+
+This file contains the functions to get the data from the Mallorn dataset.
+'''
 import os
 import sys
 import numpy as np
@@ -23,13 +30,28 @@ class MallornData:
         return: [discovery_time, discovery_flux, discovery_flux_error, discovery_filter]
         '''
         return pass 
-        
+
     def remove_outliers(self, sigma_limit = 5):
         '''
         this function will remove the outliers from the data.
         return: [time, flux, flux_error, filter]
         '''
         return pass 
+    
+    def save_to_npy(self, data, path):
+        '''
+        this function will save the data to a file.
+        return: None
+        '''
+        return pass 
+
+    def load_from_npy(self, path):
+        '''
+        this function will load the data from a file.
+        return: [time, flux, flux_error, filter]
+        '''
+        return pass 
+
 
     @property
     def data(self):
@@ -47,9 +69,3 @@ class MallornData:
 
 
 
-
-
-
-if __name__ == "__main__":
-    data = get_mallorn_data("data/mallorn.csv")
-    print(data.head())
