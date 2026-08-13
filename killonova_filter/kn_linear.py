@@ -173,12 +173,13 @@ class KNLinear:
             return None
 
         return {
-            "decay_mag_beta": mag_beta,
-            "decay_mag_intercept": mag_intercept,
-            "peak_time": self.peak_time,
-            "decay_time": float(fade_df["delta_t"].max()),
-            "n_points": len(fade_df),
+            "decay_mag_beta": float(round(mag_beta, 3)),
+            "decay_mag_intercept": float(round(mag_intercept, 3)),
+            "peak_time": float(round(self.peak_time, 3)),
+            "decay_time": float(round(float(fade_df["delta_t"].max()))),
+            "n_points": int(len(fade_df)),
         }
+   
 
     def fit_fade(self, photo_df=None):
         """Fit per-band power-law fade: |delta_flux| = amplitude * delta_t^beta."""
@@ -236,19 +237,20 @@ class KNLinear:
         fade_by_band = self.fit_fade()
 
         return {
-            "rise_time": rise_fit["rise_time"] if rise_fit else None,
-            "rise_mag_slope": rise_fit["rise_mag_slope"] if rise_fit else None,
-            "rise_mag_intercept": rise_fit["rise_mag_intercept"] if rise_fit else None,
-            "rise_flux_slope": rise_fit["rise_flux_slope"] if rise_fit else None,
-            "rise_flux_intercept": rise_fit["rise_flux_intercept"] if rise_fit else None,
-            "decay_time": fade_by_band.get("decay_time") if fade_by_band else None,
-            "decay_mag_beta": fade_by_band.get("decay_mag_beta") if fade_by_band else None,
-            "decay_mag_intercept": fade_by_band.get("decay_mag_intercept") if fade_by_band else None,
+            "rise_time": round(rise_fit["rise_time"], 3) if rise_fit and rise_fit.get("rise_time") is not None else None,
+            "rise_mag_slope": round(rise_fit["rise_mag_slope"], 3) if rise_fit and rise_fit.get("rise_mag_slope") is not None else None,
+            "rise_mag_intercept": round(rise_fit["rise_mag_intercept"], 3) if rise_fit and rise_fit.get("rise_mag_intercept") is not None else None,
+            "rise_flux_slope": round(rise_fit["rise_flux_slope"], 3) if rise_fit and rise_fit.get("rise_flux_slope") is not None else None,
+            "rise_flux_intercept": round(rise_fit["rise_flux_intercept"], 3) if rise_fit and rise_fit.get("rise_flux_intercept") is not None else None,
+            "decay_time": round(fade_by_band.get("decay_time"), 3) if fade_by_band and fade_by_band.get("decay_time") is not None else None,
+            "decay_mag_beta": round(fade_by_band.get("decay_mag_beta"), 3) if fade_by_band and fade_by_band.get("decay_mag_beta") is not None else None,
+            "decay_mag_intercept": round(fade_by_band.get("decay_mag_intercept"), 3) if fade_by_band and fade_by_band.get("decay_mag_intercept") is not None else None,
             "decay_by_band": fade_by_band if fade_by_band else None,
-            "fade_chi_square": self._fade_chi_square(fade_by_band) if fade_by_band else None,
-            "peak_time": self.peak_time,
-            "peak_mag": self.peak_mag,
-            "peak_mag_err": self.peak_mag_err,
+            "fade_chi_square": round(self._fade_chi_square(fade_by_band), 3) if fade_by_band and self._fade_chi_square(fade_by_band) is not None else None,
+            "peak_time": round(self.peak_time, 3) if self.peak_time is not None else None,
+            "peak_mag": round(self.peak_mag, 3) if self.peak_mag is not None else None,
+            "peak_mag_err": round(self.peak_mag_err, 3) if self.peak_mag_err is not None else None,
+       
         }
 
 
@@ -327,13 +329,13 @@ class KNLinear:
 
     def annotate(self) -> dict:
         """Return an annotation payload for Lasair."""
+        result = self.predict()
         return {
-            "classification": "kilonova_candidate",
+            "classification": "KN candidate" if result["KN"] >= 0.8 else "non-KN",
             "explanation": (
-                f"KN linear filter: rise_time={self.meta['rise_time']}, "
-                f"decay_beta={self.meta['decay_beta']}"
+                f"rise_time={self.meta['rise_time']}, rise_mag_slope={self.meta['rise_mag_slope']}, rise_mag_intercept={self.meta['rise_mag_intercept']}, rise_flux_slope={self.meta['rise_flux_slope']}, rise_flux_intercept={self.meta['rise_flux_intercept']}, decay_time={self.meta['decay_time']}, decay_mag_beta={self.meta['decay_mag_beta']}, decay_mag_intercept={self.meta['decay_mag_intercept']}, decay_by_band={self.meta['decay_by_band']}, fade_chi_square={self.meta['fade_chi_square']}"
             ),
-            "classdict": self.meta,
+            "classdict": result,
             "version": "0.1",
             "url": "",
         }
@@ -478,8 +480,8 @@ def main(object_id = str | None):
         object_id = random_example.split(".")[0]
     print("random_example:", object_id)
     kn_linear = KNLinear.from_object_id(object_id)
-    result = kn_linear.predict()
-    print(result)
+    # result = kn_linear.predict()
+    print(kn_linear.annotate())
     # kn_linear.plot_object(photo_df=kn_linear.photo_df, unit="mag", show_fit=True, padding=False, predict_result=kn_linear.predict())
 
 
