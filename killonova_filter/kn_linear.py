@@ -18,11 +18,12 @@ LSST_BANDS = ['u', 'g', 'r', 'i', 'z', 'y']
 class KNLinear:
     """Per-object killnova feature extraction and classification."""
 
-    def __init__(self, object_info: dict, model_bundle=None):
+    def __init__(self, object_info: dict, model_bundle=None, padding=False):
         self.object_info = object_info
         self.object_id = str(
             object_info.get("diaObjectId", object_info.get("objectId", ""))
         )
+        self.padding = padding
         self.model_bundle = model_bundle
         self.lasair_data = object_info.get("lasairData", {})
         self.sherlock_data = self.lasair_data.get("sherlock", {})
@@ -139,19 +140,21 @@ class KNLinear:
             
 
     def check_fade(self):
-        decay_by_band = (
-            self.meta.get("decay_by_band_padded")
-            or self.meta.get("decay_by_band")
-            or {}
-        )
+        return self._fade_chi_square(self.meta.get("decay_by_band") or {})
+
+    def _fade_chi_square(self, decay_by_band):
         chi_square = []
-        for band, fit in decay_by_band.items():
-            if fit is None or fit.get("decay_beta") is None:
+        weights = []
+        for band, fit in (decay_by_band or {}).items():
+            if fit is None or fit.get("decay_mag_beta") is None:
                 continue
             chi_square.append(
-                (fit["decay_beta"] - decay_beta[band]) ** 2 / decay_beta_err[band] ** 2
+                (fit["decay_mag_beta"] - decay_beta[band]) ** 2 / decay_beta_err[band] ** 2
             )
-        return float(np.mean(chi_square)) if chi_square else None
+            weights.append(fit.get("n_points", 1))
+        if not chi_square:
+            return None
+        return float(np.average(chi_square, weights=weights))
 
     def _fit_band_fade(self, band_df):
         """Fit mag = intercept + beta * delta_t after the universal peak."""
@@ -165,6 +168,7 @@ class KNLinear:
 
         mag_beta, mag_intercept = stats.linregress(fade_df["delta_t"], fade_df["mag"])[0:2]
 
+
         if mag_beta is None or mag_intercept is None:
             return None
 
@@ -176,10 +180,10 @@ class KNLinear:
             "n_points": len(fade_df),
         }
 
-    def fit_fade(self, photo_df=None, padding=True):
+    def fit_fade(self, photo_df=None):
         """Fit per-band power-law fade: |delta_flux| = amplitude * delta_t^beta."""
         if photo_df is None:
-            photo_df = self.band_padding() if padding else self.photo_df
+            photo_df = self.band_padding() if self.padding else self.photo_df
         if photo_df is None or photo_df.empty:
             return None
 
@@ -188,6 +192,7 @@ class KNLinear:
             band_fit = self._fit_band_fade(photo_df[photo_df["band"] == band])
             if band_fit is not None:
                 decay_fits[band] = band_fit
+ 
         return decay_fits if decay_fits else None
 
     def fit_rise(self, photo_df=None):
@@ -226,54 +231,25 @@ class KNLinear:
         return decay_beta, decay_intercept, decay_time
 
     def get_meta(self):
-        r_latest = self.lasair_data.get("r_latestMJD", self.lasair_data.get("g_latestMJD"))
-        r_first = self.lasair_data.get("r_firstMJD", self.lasair_data.get("g_firstMJD"))
-        r_last = self.lasair_data.get("r_lastMJD", self.lasair_data.get("g_lastMJD"))
 
         rise_fit = self.fit_rise()
-        fade_by_band = self.fit_fade(padding=False)
-        fade_by_band_padded = self.fit_fade(padding=True)
-        valid_fade = fade_by_band or {}
-        valid_fade_padded = fade_by_band_padded or {}
-
-        decay_beta, decay_intercept, decay_time = self._aggregate_fade_fits(valid_fade_padded)
-        if decay_beta is None:
-            decay_beta, decay_intercept, decay_time = self._aggregate_fade_fits(valid_fade)
-        if decay_time is None:
-            decay_time = (
-                (r_latest - r_last) if r_latest is not None and r_last is not None else None
-            )
+        fade_by_band = self.fit_fade()
 
         return {
-            "rise_time": rise_fit["rise_time"] if rise_fit else (
-                (r_latest - r_first) if r_latest is not None and r_first is not None else None
-            ),
+            "rise_time": rise_fit["rise_time"] if rise_fit else None,
             "rise_mag_slope": rise_fit["rise_mag_slope"] if rise_fit else None,
             "rise_mag_intercept": rise_fit["rise_mag_intercept"] if rise_fit else None,
             "rise_flux_slope": rise_fit["rise_flux_slope"] if rise_fit else None,
             "rise_flux_intercept": rise_fit["rise_flux_intercept"] if rise_fit else None,
-            "decay_time": decay_time,
-            "decay_mag_beta": decay_beta,
-            "decay_mag_intercept": decay_intercept,
-            "decay_by_band": valid_fade if valid_fade else None,
-            "decay_by_band_padded": valid_fade_padded if valid_fade_padded else None,
-            "fade_chi_square": self._fade_chi_square(valid_fade_padded or valid_fade),
+            "decay_time": fade_by_band.get("decay_time") if fade_by_band else None,
+            "decay_mag_beta": fade_by_band.get("decay_mag_beta") if fade_by_band else None,
+            "decay_mag_intercept": fade_by_band.get("decay_mag_intercept") if fade_by_band else None,
+            "decay_by_band": fade_by_band if fade_by_band else None,
+            "fade_chi_square": self._fade_chi_square(fade_by_band) if fade_by_band else None,
             "peak_time": self.peak_time,
             "peak_mag": self.peak_mag,
             "peak_mag_err": self.peak_mag_err,
         }
-
-    def _fade_chi_square(self, decay_by_band):
-        chi_square = []
-        for band, fit in (decay_by_band or {}).items():
-            if fit is None or fit.get("decay_beta") is None:
-                continue
-            chi_square.append(
-                (fit["decay_beta"] - decay_beta[band]) ** 2 / decay_beta_err[band] ** 2
-            )
-        return float(np.mean(chi_square)) if chi_square else None
-
-
 
 
     def uniform_light_curve(self, photo_df=None, window_size = 0.5):
@@ -333,19 +309,21 @@ class KNLinear:
 
     def predict(self) -> dict:
         """Predict the probability of the object being a Kilonova using kn model."""
+        default_result = {"KN": 0.0, "non-KN": 1.0}
         if self.photo_df is None:
-            return {"KN": 0.0, "non-KN": 1.0}
+            return default_result
         if not self.check_rise():
-            return {"KN": 0.0, "non-KN": 1.0}
+            return default_result
 
         chi_square = self.meta.get("fade_chi_square")
+        print(f"chi_square: {chi_square}")
         if chi_square is None:
-            chi_square = self.check_fade()
-        if chi_square is None:
-            return {"KN": 0.0, "non-KN": 1.0}
+            return default_result
 
-        prob_KN = 1 / (1 + np.exp(chi_square))
-        return {"KN": prob_KN, "non-KN": 1.0 - prob_KN}
+        prob_KN = np.round(1 / (1 + np.exp(chi_square)), 3)
+
+
+        return {"KN": float(prob_KN), "non-KN": float(1.0 - prob_KN)}
 
     def annotate(self) -> dict:
         """Return an annotation payload for Lasair."""
@@ -460,7 +438,7 @@ class KNLinear:
         plt.legend(loc='upper right')
         plt.xlabel("Time (days)")
         plt.ylabel(f"{unit}")
-        # if unit == "flux": plt.yscale("log")
+ 
         if unit == "mag": plt.gca().invert_yaxis()
         plt.title(
             f"{self.object_info['diaObjectId']}, KN: {predict_result['KN']:.3f}, non-KN: {predict_result['non-KN']:.3f}"
@@ -498,11 +476,11 @@ def main(object_id = str | None):
     if object_id is None:
         random_example = np.random.choice(os.listdir(EXAMPLES_DIR))
         object_id = random_example.split(".")[0]
-    kn_linear = KNLinear.from_object_id(object_id)
     print("random_example:", object_id)
-    # print(kn_linear.meta)
-    kn_linear.plot_object(photo_df=kn_linear.photo_df, unit="mag", show_fit=True, padding=False, predict_result=kn_linear.predict())
-
+    kn_linear = KNLinear.from_object_id(object_id)
+    result = kn_linear.predict()
+    print(result)
+    # kn_linear.plot_object(photo_df=kn_linear.photo_df, unit="mag", show_fit=True, padding=False, predict_result=kn_linear.predict())
 
 
 
